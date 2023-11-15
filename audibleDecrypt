@@ -1,0 +1,165 @@
+#!/bin/bash
+####################################################################################
+# AUDIBLE AAX TO M4B CONVERTER
+#
+# This script is designed to decrypt Audible AAX audiobook files and convert them
+# into the M4B format. It also extracts and embeds the audiobook cover art into the
+# converted M4B files.
+#
+# REQUIREMENTS:
+# - ffmpeg: Used for decryption of AAX files and conversion to M4B format.
+# - AtomicParsley: Used for embedding artwork into M4B files.
+#
+# INSTALLATION INSTRUCTIONS:
+# macOS:
+#   - ffmpeg: Install via Homebrew with 'brew install ffmpeg'
+#   - AtomicParsley: Install via Homebrew with 'brew install AtomicParsley'
+# Windows:
+#   - ffmpeg: Download from https://ffmpeg.org/download.html or install via Chocolatey with 'choco install ffmpeg'
+#   - AtomicParsley: Download from https://github.com/wez/atomicparsley or install via Chocolatey with 'choco install atomicparsley'
+# Linux:
+#   - ffmpeg: Install via package manager, e.g., 'sudo apt-get install ffmpeg' (Debian/Ubuntu)
+#   - AtomicParsley: Install via package manager, e.g., 'sudo apt-get install atomicparsley' (Debian/Ubuntu)
+#
+# CONFIGURATION:
+# The script uses the following configurable variables:
+# - AUDIBLE_ACTIVATION_BYTES: Your unique Audible activation bytes. If not set in
+#   the script, it will default to the value of the environment variable with the
+#   same name.
+# - AUDIBLE_ARCHIVED_DIR: Directory to move original AAX files after processing.
+# - AUDIBLE_OUTPUT_DIR: Directory to copy converted M4B files.
+#
+# USAGE:
+# Run the script with one or more AAX files as arguments. Example:
+# ./audibleConvert.sh book1.aax book2.aax
+#
+# NOTES:
+# - The script checks for the required tools (ffmpeg and AtomicParsley) at the
+#   beginning and exits if they are not installed.
+# - It uses the AUDIBLE_ACTIVATION_BYTES for decrypting the AAX files.
+# - Temporary files are created during processing and are cleaned up on exit.
+#
+####################################################################################
+
+
+# Configuration
+AUDIBLE_ACTIVATION_BYTES="${AUDIBLE_ACTIVATION_BYTES:-}" # Use environment variable if not set here
+# I save the aax files to a network drive for archiving.
+AUDIBLE_ARCHIVED_DIR="/Volumes/Audible/aax" # Directory to move original AAX files after processing
+# I save the converted m4b files to a network drive for archiving.
+AUDIBLE_OUTPUT_DIR="/Volumes/Audible/m4b" # Directory to copy converted M4B files
+
+# End of Configuration
+
+# Function to create a unique temporary file
+create_temp_file() {
+    mktemp /tmp/audible_script.XXXXXX
+}
+
+# Setup a trap to clean up temporary files on EXIT and INTERRUPT
+cleanup() {
+    echo "Cleaning up temporary files..."
+    rm -f /tmp/audible_script.*
+}
+trap cleanup EXIT INT
+
+# Check for required programs
+if ! command -v ffmpeg &> /dev/null || ! command -v AtomicParsley &> /dev/null; then
+    echo "ffmpeg and AtomicParsley are required but not installed. Exiting."
+    exit 1
+fi
+
+# Check if AUDIBLE_ACTIVATION_BYTES is set
+if [ -z "$AUDIBLE_ACTIVATION_BYTES" ]; then
+    echo "Error: AUDIBLE_ACTIVATION_BYTES is not set."
+    exit 1
+fi
+
+# Function to extract artwork
+extract_artwork() {
+    local artworkFile
+    artworkFile=$(create_temp_file)
+    local baseName="${1%.*}"
+    ffmpeg -activation_bytes "$AUDIBLE_ACTIVATION_BYTES" -i "$1" -vcodec copy "${baseName}.jpg" > "$artworkFile" 2>&1
+    local status=$?
+    cat "$artworkFile"
+    rm "$artworkFile"
+    return $status
+}
+
+# Function to decrypt aax file
+decrypt_aax() {
+    local decryptionFile
+    decryptionFile=$(create_temp_file)
+    local baseName="${1%.*}"
+    ffmpeg -activation_bytes "$AUDIBLE_ACTIVATION_BYTES" -i "$1" -vn -c:a copy "${baseName}.m4b" > "$decryptionFile" 2>&1
+    local status=$?
+    cat "$decryptionFile"
+    rm "$decryptionFile"
+    return $status
+}
+
+# Function to bundle m4b file with artwork
+bundle_m4b() {
+    local bundleFile
+    bundleFile=$(create_temp_file)
+    local baseName="${1%.*}"
+    if [ -f "${baseName}.jpg" ]; then
+        AtomicParsley "${baseName}.m4b" --artwork "${baseName}.jpg" --overWrite > "$bundleFile" 2>&1
+        local status=$?
+        cat "$bundleFile"
+        rm "$bundleFile"
+        return $status
+    fi
+}
+
+# Main loop
+originalDirectory="$PWD"
+
+for audibleBook in "$@"; do
+    extension="${audibleBook##*.}"
+    baseName="${audibleBook%.*}"
+    # Check if the file contains a path
+    if [[ "$audibleBook" == */* ]]; then
+        directory="${audibleBook%/*}"
+    else
+        directory="$PWD"
+    fi
+
+    if [ "$extension" != "aax" ]; then
+        echo "Skipping $audibleBook -- must be AAX"
+        continue
+    fi
+
+    if [ -f "$audibleBook" ]; then
+        if [ "$PWD" != "$directory" ]; then
+            cd "$directory" || exit 1
+        fi
+
+
+        echo "Processing ${audibleBook}:"
+
+        if ! extract_artwork "$audibleBook"; then
+            echo "Artwork extraction failed."
+            continue
+        fi
+
+        if ! decrypt_aax "$audibleBook"; then
+            echo "Decryption failed."
+            exit 1
+        fi
+
+        if ! bundle_m4b "$audibleBook"; then
+            echo "Bundling failed."
+            exit 1
+        fi
+
+        rm -f "${baseName}.jpg"
+
+        # Move and copy files if directories exist
+        [ -d "$AUDIBLE_ARCHIVED_DIR" ] && mv -v "$audibleBook" "$AUDIBLE_ARCHIVED_DIR"
+        [ -d "$AUDIBLE_OUTPUT_DIR" ] && cp -v "${baseName}.m4b" "$AUDIBLE_OUTPUT_DIR"
+    fi
+done
+
+cd "$originalDirectory" || exit 1
