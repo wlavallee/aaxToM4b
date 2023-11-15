@@ -4,7 +4,7 @@
 This is a simple bash script designed to convert Audible's `.aax` files to `.m4b` format, which can then be imported into Apple's Books program. The script is a response to the introduction of what I consider 'advertising' in the Audible app after Amazon's acquisition of Audible. The script utilizes the `activation_bytes` unique to your Audible account to decrypt and convert the files.
 
 ## Background
-I have been using this script for a while as a workaround for the increased advertising content in the Audible app. The `.aax` files from Audible are essentially standard audio files with added DRM protection. Once the `activation_bytes` for your account are known, these files can be converted into a more standard and versatile format (`m4b`), making them compatible with Apple Books, which I find to have less intrusive advertising.
+I have been using this script for a while as a workaround for the increased advertising content in the Audible app. The `.aax` files from Audible are essentially standard audio files with added DRM protection. Once the `activation_bytes` for your account are known (beyond the scope of this page), these files can be converted into a more standard and versatile format (`m4b`), making them compatible with Apple Books, which I find to have less intrusive advertising.
 
 ## Requirements
 - **ffmpeg**: A robust tool for processing multimedia files.
