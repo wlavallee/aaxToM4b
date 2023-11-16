@@ -33,6 +33,7 @@ Before running the script, you need to set the following variables:
 Run the script with one or more AAX files as arguments. For example:
 ```bash
 ./audibleDecrypt book1.aax book2.aax
+```
 
 ## Disclaimer
 This script is intended for personal use. Users should ensure they comply with Audible's terms of service and applicable laws regarding the use of DRM-protected content.
